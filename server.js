@@ -12,7 +12,7 @@ app.use(bodyParser.json());
 
 // MongoDB Connection
 // Connect to local MongoDB instance
-const MONGO_URI = 'mongodb://localhost:27017/mean-learning-db';
+const MONGO_URI = 'mongodb+srv://mylocaldata:meanstackdata@cluster.fsjxyva.mongodb.net/';
 
 mongoose.connect(MONGO_URI)
     .then(() => console.log('MongoDB Connected'))
