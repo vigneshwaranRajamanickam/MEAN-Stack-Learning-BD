@@ -3,6 +3,14 @@ const { graphqlHTTP } = require('express-graphql');
 const { buildSchema } = require('graphql');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+require('dotenv').config();
+
+const User = require('./models/User');
+const Item = require('./models/Item');
+
+const JWT_SECRET = process.env.JWT_SECRET || 'your_super_secret_key_change_this';
 
 const app = express();
 const PORT = 3001;
@@ -16,12 +24,7 @@ mongoose.connect(MONGO_URI)
     .then(() => console.log('MongoDB Connected (GraphQL Server)'))
     .catch(err => console.log('MongoDB Connection Error:', err));
 
-// Mongoose Model (Reusing the schema logic, ideally should be shared)
-const ItemSchema = new mongoose.Schema({
-    name: String,
-    description: String
-});
-const Item = mongoose.model('Item', ItemSchema);
+
 
 // GraphQL Schema
 const schema = buildSchema(`
@@ -29,6 +32,7 @@ const schema = buildSchema(`
     id: ID!
     name: String!
     description: String!
+    image: String
   }
 
   type Query {
@@ -37,9 +41,12 @@ const schema = buildSchema(`
   }
 
   type Mutation {
-    addItem(name: String!, description: String!): Item
-    updateItem(id: ID!, name: String!, description: String!): Item
+    addItem(name: String!, description: String!, image: String): Item
+    updateItem(id: ID!, name: String!, description: String!, image: String): Item
     deleteItem(id: ID!): String
+
+    register(username: String!, email: String!, password: String!): String
+    login(email: String!, password: String!): String
   }
 `);
 
@@ -51,16 +58,44 @@ const root = {
     getItem: async ({ id }) => {
         return await Item.findById(id);
     },
-    addItem: async ({ name, description }) => {
-        const item = new Item({ name, description });
+    addItem: async ({ name, description, image }) => {
+        const item = new Item({ name, description, image });
         return await item.save();
     },
-    updateItem: async ({ id, name, description }) => {
-        return await Item.findByIdAndUpdate(id, { name, description }, { new: true });
+    updateItem: async ({ id, name, description, image }) => {
+        return await Item.findByIdAndUpdate(id, { name, description, image }, { new: true });
     },
     deleteItem: async ({ id }) => {
         await Item.findByIdAndDelete(id);
         return "Item deleted successfully";
+    },
+
+    register: async ({ username, email, password }) => {
+        const existingUser = await User.findOne({ email });
+        if (existingUser) {
+            throw new Error('User already exists');
+        }
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(password, salt);
+        const newUser = new User({ username, email, password: hashedPassword });
+        await newUser.save();
+        return "User registered successfully";
+    },
+
+    login: async ({ email, password }) => {
+        const user = await User.findOne({ email });
+        if (!user) {
+            throw new Error('Invalid credentials');
+        }
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) {
+            throw new Error('Invalid credentials');
+        }
+        return jwt.sign(
+            { userId: user._id, username: user.username },
+            JWT_SECRET,
+            { expiresIn: '1h' }
+        );
     }
 };
 

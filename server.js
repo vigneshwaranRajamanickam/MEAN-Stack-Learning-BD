@@ -2,6 +2,14 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const bodyParser = require('body-parser');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+require('dotenv').config();
+
+const User = require('./models/User');
+const Item = require('./models/Item');
+
+const JWT_SECRET = process.env.JWT_SECRET || 'your_super_secret_key_change_this';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -9,6 +17,10 @@ const PORT = process.env.PORT || 3000;
 // Middleware
 app.use(cors());
 app.use(bodyParser.json());
+app.use('/uploads', express.static('uploads')); // Serve uploaded files statically
+
+const uploadRoute = require('./routes/upload');
+app.use('/api/upload', uploadRoute);
 
 // MongoDB Connection
 // Connect to local MongoDB instance
@@ -18,13 +30,91 @@ mongoose.connect(MONGO_URI)
     .then(() => console.log('MongoDB Connected'))
     .catch(err => console.log('MongoDB Connection Error:', err));
 
-// Simple Schema and Model
-const ItemSchema = new mongoose.Schema({
-    name: String,
-    description: String
+
+
+// Auth Routes
+
+// REGISTER
+app.post('/api/register', async (req, res) => {
+    try {
+        const { username, email, password } = req.body;
+
+        // Check if user exists
+        let existingUser = await User.findOne({ email });
+        if (existingUser) {
+            return res.status(400).json({ message: 'User already exists' });
+        }
+
+        // Hash password
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(password, salt);
+
+        // Create user
+        const newUser = new User({
+            username,
+            email,
+            password: hashedPassword
+        });
+
+        await newUser.save();
+
+        res.status(201).json({ message: 'User registered successfully' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Server error: ' + err.message });
+    }
 });
 
-const Item = mongoose.model('Item', ItemSchema);
+// LOGIN
+app.post('/api/login', async (req, res) => {
+    try {
+        const { email, password } = req.body;
+
+        // Check if user exists
+        const user = await User.findOne({ email });
+        if (!user) {
+            return res.status(400).json({ message: 'Invalid credentials' });
+        }
+
+        // Validate password
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) {
+            return res.status(400).json({ message: 'Invalid credentials' });
+        }
+
+        // Generate JWT
+        const token = jwt.sign(
+            { userId: user._id, username: user.username },
+            JWT_SECRET,
+            { expiresIn: '1h' }
+        );
+
+        res.json({ token, userId: user._id, username: user.username });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// FORGOT PASSWORD
+app.post('/api/forgot-password', async (req, res) => {
+    try {
+        const { email } = req.body;
+        const user = await User.findOne({ email });
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Simulating email sending
+        console.log(`[REST] Forgot password requested for: ${email}`);
+
+        res.json({ message: 'If that email exists, a password reset link has been sent.' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
 
 // Routes
 
@@ -42,7 +132,8 @@ app.get('/api/items', async (req, res) => {
 app.post('/api/items', async (req, res) => {
     const item = new Item({
         name: req.body.name,
-        description: req.body.description
+        description: req.body.description,
+        image: req.body.image
     });
 
     try {
@@ -60,7 +151,8 @@ app.put('/api/items/:id', async (req, res) => {
             req.params.id,
             {
                 name: req.body.name,
-                description: req.body.description
+                description: req.body.description,
+                image: req.body.image
             },
             { new: true } // Return the updated document
         );
