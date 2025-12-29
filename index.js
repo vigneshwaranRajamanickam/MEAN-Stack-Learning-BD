@@ -33,6 +33,7 @@ const schema = buildSchema(`
     name: String!
     description: String!
     image: String
+    price: Float
   }
 
   type Query {
@@ -41,9 +42,10 @@ const schema = buildSchema(`
   }
 
   type Mutation {
-    addItem(name: String!, description: String!, image: String): Item
-    updateItem(id: ID!, name: String!, description: String!, image: String): Item
+    addItem(name: String!, description: String!, image: String, price: Float): Item
+    updateItem(id: ID!, name: String!, description: String!, image: String, price: Float): Item
     deleteItem(id: ID!): String
+    resetItems: String
 
     register(username: String!, email: String!, password: String!): String
     login(email: String!, password: String!): String
@@ -58,16 +60,20 @@ const root = {
     getItem: async ({ id }) => {
         return await Item.findById(id);
     },
-    addItem: async ({ name, description, image }) => {
-        const item = new Item({ name, description, image });
+    addItem: async ({ name, description, image, price }) => {
+        const item = new Item({ name, description, image, price });
         return await item.save();
     },
-    updateItem: async ({ id, name, description, image }) => {
-        return await Item.findByIdAndUpdate(id, { name, description, image }, { new: true });
+    updateItem: async ({ id, name, description, image, price }) => {
+        return await Item.findByIdAndUpdate(id, { name, description, image, price }, { new: true });
     },
     deleteItem: async ({ id }) => {
         await Item.findByIdAndDelete(id);
         return "Item deleted successfully";
+    },
+    resetItems: async () => {
+        await Item.deleteMany({});
+        return "All items have been deleted/reset.";
     },
 
     register: async ({ username, email, password }) => {

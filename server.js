@@ -133,7 +133,8 @@ app.post('/api/items', async (req, res) => {
     const item = new Item({
         name: req.body.name,
         description: req.body.description,
-        image: req.body.image
+        image: req.body.image,
+        price: req.body.price
     });
 
     try {
@@ -152,7 +153,8 @@ app.put('/api/items/:id', async (req, res) => {
             {
                 name: req.body.name,
                 description: req.body.description,
-                image: req.body.image
+                image: req.body.image,
+                price: req.body.price
             },
             { new: true } // Return the updated document
         );
@@ -167,6 +169,16 @@ app.delete('/api/items/:id', async (req, res) => {
     try {
         await Item.findByIdAndDelete(req.params.id);
         res.json({ message: 'Item deleted' });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// Reset Collection (Delete All Items)
+app.delete('/api/reset', async (req, res) => {
+    try {
+        await Item.deleteMany({});
+        res.json({ message: 'All items have been deleted/reset.' });
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
