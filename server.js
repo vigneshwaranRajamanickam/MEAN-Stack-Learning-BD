@@ -1,13 +1,15 @@
+require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-require('dotenv').config();
+const { graphqlHTTP } = require('express-graphql');
+const { buildSchema } = require('graphql');
 
 const User = require('./models/User');
-const Item = require('./models/Item');
+const Product = require('./models/Product');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your_super_secret_key_change_this';
 
@@ -118,19 +120,19 @@ app.post('/api/forgot-password', async (req, res) => {
 
 // Routes
 
-// Get all items
-app.get('/api/items', async (req, res) => {
+// Get all products
+app.get('/api/products', async (req, res) => {
     try {
-        const items = await Item.find();
-        res.json(items);
+        const products = await Product.find();
+        res.json(products);
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
 });
 
-// Create a new item
-app.post('/api/items', async (req, res) => {
-    const item = new Item({
+// Create a new product
+app.post('/api/products', async (req, res) => {
+    const product = new Product({
         name: req.body.name,
         description: req.body.description,
         image: req.body.image,
@@ -138,17 +140,17 @@ app.post('/api/items', async (req, res) => {
     });
 
     try {
-        const newItem = await item.save();
-        res.status(201).json(newItem);
+        const newProduct = await product.save();
+        res.status(201).json(newProduct);
     } catch (err) {
         res.status(400).json({ message: err.message });
     }
 });
 
-// Update an item
-app.put('/api/items/:id', async (req, res) => {
+// Update a product
+app.put('/api/products/:id', async (req, res) => {
     try {
-        const updatedItem = await Item.findByIdAndUpdate(
+        const updatedProduct = await Product.findByIdAndUpdate(
             req.params.id,
             {
                 name: req.body.name,
@@ -158,32 +160,121 @@ app.put('/api/items/:id', async (req, res) => {
             },
             { new: true } // Return the updated document
         );
-        res.json(updatedItem);
+        res.json(updatedProduct);
     } catch (err) {
         res.status(400).json({ message: err.message });
     }
 });
 
-// Delete an item
-app.delete('/api/items/:id', async (req, res) => {
+// Delete a product
+app.delete('/api/products/:id', async (req, res) => {
     try {
-        await Item.findByIdAndDelete(req.params.id);
-        res.json({ message: 'Item deleted' });
+        await Product.findByIdAndDelete(req.params.id);
+        res.json({ message: 'Product deleted' });
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
 });
 
-// Reset Collection (Delete All Items)
+// Reset Collection (Delete All Products)
 app.delete('/api/reset', async (req, res) => {
     try {
-        await Item.deleteMany({});
-        res.json({ message: 'All items have been deleted/reset.' });
+        await Product.deleteMany({});
+        res.json({ message: 'All products have been deleted/reset.' });
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
 });
+
+// GraphQL logic
+
+// GraphQL Schema
+const schema = buildSchema(`
+  type Product {
+    id: ID!
+    name: String!
+    description: String!
+    image: String
+    price: Float
+  }
+
+  type Query {
+    getProducts: [Product]
+    getProduct(id: ID!): Product
+  }
+
+  type Mutation {
+    addProduct(name: String!, description: String!, image: String, price: Float): Product
+    updateProduct(id: ID!, name: String!, description: String!, image: String, price: Float): Product
+    deleteProduct(id: ID!): String
+    resetProducts: String
+
+    register(username: String!, email: String!, password: String!): String
+    login(email: String!, password: String!): String
+  }
+`);
+
+// Resolvers
+const root = {
+    getProducts: async () => {
+        return await Product.find();
+    },
+    getProduct: async ({ id }) => {
+        return await Product.findById(id);
+    },
+    addProduct: async ({ name, description, image, price }) => {
+        const product = new Product({ name, description, image, price });
+        return await product.save();
+    },
+    updateProduct: async ({ id, name, description, image, price }) => {
+        return await Product.findByIdAndUpdate(id, { name, description, image, price }, { new: true });
+    },
+    deleteProduct: async ({ id }) => {
+        await Product.findByIdAndDelete(id);
+        return "Product deleted successfully";
+    },
+    resetProducts: async () => {
+        await Product.deleteMany({});
+        return "All products have been deleted/reset.";
+    },
+
+    register: async ({ username, email, password }) => {
+        const existingUser = await User.findOne({ email });
+        if (existingUser) {
+            throw new Error('User already exists');
+        }
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(password, salt);
+        const newUser = new User({ username, email, password: hashedPassword });
+        await newUser.save();
+        return "User registered successfully";
+    },
+
+    login: async ({ email, password }) => {
+        const user = await User.findOne({ email });
+        if (!user) {
+            throw new Error('Invalid credentials');
+        }
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) {
+            throw new Error('Invalid credentials');
+        }
+        return jwt.sign(
+            { userId: user._id, username: user.username },
+            JWT_SECRET,
+            { expiresIn: '1h' }
+        );
+    }
+};
+
+// GraphQL Endpoint
+app.use('/graphql', graphqlHTTP({
+    schema: schema,
+    rootValue: root,
+    graphiql: true // Enable GraphiQL interface
+}));
 
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
