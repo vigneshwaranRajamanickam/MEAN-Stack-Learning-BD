@@ -15,6 +15,16 @@ const UserSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  role: {
+    type: String,
+    enum: ['superadmin', 'admin', 'manager', 'cashier'],
+    default: 'admin'
+  },
+  storeId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Store',
+    default: null // Null for superadmin or users not yet assigned
+  },
   createdAt: {
     type: Date,
     default: Date.now
