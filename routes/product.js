@@ -34,6 +34,33 @@ router.post('/', verifyToken, async (req, res) => {
     }
 });
 
+// Bulk Create Products
+router.post('/bulk', verifyToken, async (req, res) => {
+    try {
+        const productsData = req.body; // Expecting an array
+        if (!Array.isArray(productsData)) {
+            return res.status(400).json({ message: 'Input must be an array of products' });
+        }
+
+        // Use storeId from query param (active store) or fallback to token
+        const storeId = req.query.storeId || req.user.storeId;
+
+        if (!storeId) {
+            return res.status(400).json({ message: 'Store ID is required for bulk upload.' });
+        }
+
+        const productsToInsert = productsData.map(p => ({
+            ...p,
+            storeId: storeId
+        }));
+
+        const insertedProducts = await Product.insertMany(productsToInsert);
+        res.status(201).json(insertedProducts);
+    } catch (err) {
+        res.status(500).json({ message: 'Bulk upload failed: ' + err.message });
+    }
+});
+
 // Update a product
 router.put('/:id', verifyToken, async (req, res) => {
     try {

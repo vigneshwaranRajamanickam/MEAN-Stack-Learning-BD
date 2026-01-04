@@ -59,4 +59,15 @@ router.put('/:id', verifyToken, async (req, res) => {
     }
 });
 
+// Delete Store
+router.delete('/:id', verifyToken, async (req, res) => {
+    try {
+        const deletedStore = await Store.findByIdAndDelete(req.params.id);
+        if (!deletedStore) return res.status(404).json({ message: 'Store not found' });
+        res.json({ message: 'Store deleted successfully' });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
 module.exports = router;
