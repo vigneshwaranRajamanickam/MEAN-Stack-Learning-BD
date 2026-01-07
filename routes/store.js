@@ -2,6 +2,9 @@ const router = require('express').Router();
 const Store = require('../models/Store');
 const { verifyToken } = require('../middleware/auth');
 
+const User = require('../models/User');
+const bcrypt = require('bcryptjs');
+
 // Create Store
 router.post('/', verifyToken, async (req, res) => {
     try {
@@ -12,6 +15,23 @@ router.post('/', verifyToken, async (req, res) => {
             ownerId: req.user.userId
         });
         const savedStore = await newStore.save();
+
+        // Create Manager Credentials if provided
+        if (req.body.email && req.body.password) {
+            // Hash password
+            const salt = await bcrypt.genSalt(10);
+            const hashedPassword = await bcrypt.hash(req.body.password, salt);
+
+            const newUser = new User({
+                username: req.body.name.replace(/\s+/g, '').toLowerCase() + '_admin', // simplistic username gen
+                email: req.body.email,
+                password: hashedPassword,
+                role: 'manager',
+                storeId: savedStore._id
+            });
+            await newUser.save();
+        }
+
         res.status(201).json(savedStore);
     } catch (err) {
         res.status(500).json({ message: err.message });
